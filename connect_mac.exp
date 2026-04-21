@@ -1,0 +1,6 @@
+#!/usr/bin/expect -f
+set timeout 20
+spawn ssh -o StrictHostKeyChecking=no noah@100.122.75.120 "hostname && uptime"
+expect "password:"
+send "1111\r"
+expect eof
