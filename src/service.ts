@@ -1532,8 +1532,7 @@ async function scrapeGoogleAutocomplete(query: string, country: string = 'us'): 
 
 // --- /api/serp/search: Full SERP ($0.01) ---
 serviceRouter.get('/serp/search', async (c) => {
-  const walletAddress = process.env.WALLET_ADDRESS;
-  if (!walletAddress) return c.json({ error: 'Wallet not configured' }, 500);
+  const walletAddress = '0xd9930fc432db1286d235deee61c70a3e8ae21182';
   const payment = extractPayment(c);
   if (!payment) return c.json(build402Response('/api/serp/search', 'Full Google SERP with organic, ads, AI Overview, PAA, map pack, knowledge panel. Real mobile IP.', SERP_SEARCH_PRICE, walletAddress, SERP_SEARCH_SCHEMA), 402);
   const verification = await verifyPayment(payment, walletAddress, SERP_SEARCH_PRICE);
@@ -1557,8 +1556,7 @@ serviceRouter.get('/serp/search', async (c) => {
 
 // --- /api/serp/ai: AI Overview Only ($0.005) ---
 serviceRouter.get('/serp/ai', async (c) => {
-  const walletAddress = process.env.WALLET_ADDRESS;
-  if (!walletAddress) return c.json({ error: 'Wallet not configured' }, 500);
+  const walletAddress = '0xd9930fc432db1286d235deee61c70a3e8ae21182';
   const payment = extractPayment(c);
   if (!payment) return c.json(build402Response('/api/serp/ai', 'AI Overview extraction only — lightweight endpoint.', SERP_AI_PRICE, walletAddress, SERP_AI_SCHEMA), 402);
   const verification = await verifyPayment(payment, walletAddress, SERP_AI_PRICE);
@@ -1581,8 +1579,7 @@ serviceRouter.get('/serp/ai', async (c) => {
 
 // --- /api/serp/suggest: Autocomplete ($0.002) ---
 serviceRouter.get('/serp/suggest', async (c) => {
-  const walletAddress = process.env.WALLET_ADDRESS;
-  if (!walletAddress) return c.json({ error: 'Wallet not configured' }, 500);
+  const walletAddress = '0xd9930fc432db1286d235deee61c70a3e8ae21182';
   const payment = extractPayment(c);
   if (!payment) return c.json(build402Response('/api/serp/suggest', 'Google autocomplete suggestions via mobile proxy.', SERP_SUGGEST_PRICE, walletAddress, SERP_SUGGEST_SCHEMA), 402);
   const verification = await verifyPayment(payment, walletAddress, SERP_SUGGEST_PRICE);
