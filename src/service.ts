@@ -1441,7 +1441,7 @@ serviceRouter.get('/airbnb/market-stats', async (c) => {
 
 // ─── MOBILE SERP TRACKER ────────────────────────────────
 
-import { scrapeMobileSERP } from './scrapers/serp-tracker';
+import { scrapeMobileSERP, getRandomUserAgent } from './scrapers/serp-tracker';
 
 const SERP_PRICE_USDC = parseFloat(process.env.SERP_PRICE_USDC || '0.003');
 const SERP_DESCRIPTION = 'Mobile SERP Tracker — Google search results with organic, ads, PAA, AI overview, map pack, knowledge panel. Real mobile IP fingerprint.';
@@ -1486,3 +1486,119 @@ serviceRouter.get('/serp', async (c) => {
     return c.json({ error: 'SERP scrape failed', message: err?.message || String(err) }, 502);
   }
 });
+
+// ═══════════════════════════════════════════════════════════
+// BOUNTY #149: Google SERP + AI Search Scraper ($200)
+// Endpoints: /api/serp/search, /api/serp/ai, /api/serp/suggest
+// ═══════════════════════════════════════════════════════════
+
+const SERP_SEARCH_PRICE = 0.01;
+const SERP_AI_PRICE = 0.005;
+const SERP_SUGGEST_PRICE = 0.002;
+
+const SERP_SEARCH_SCHEMA = {
+  input: { query: 'string (required)', country: 'string (optional, default us)', language: 'string (optional, default en)', location: 'string (optional)' },
+  output: { organic: '[]', ads: '[]', peopleAlsoAsk: '[]', featuredSnippet: 'object|null', aiOverview: 'object|null', mapPack: '[]', knowledgePanel: 'object|null', relatedSearches: '[]', totalResults: 'string|null' },
+};
+
+const SERP_AI_SCHEMA = {
+  input: { query: 'string (required)', country: 'string (optional)', language: 'string (optional)' },
+  output: { aiOverview: '{ text, sources: [{ title, url }] }', featuredSnippet: '{ text, source }', query: 'string' },
+};
+
+const SERP_SUGGEST_SCHEMA = {
+  input: { query: 'string (required)', country: 'string (optional, default us)' },
+  output: { suggestions: 'string[]', query: 'string' },
+};
+
+// --- Google Autocomplete Scraper ---
+async function scrapeGoogleAutocomplete(query: string, country: string = 'us'): Promise<string[]> {
+  const url = `https://suggestqueries.google.com/complete/search?client=firefox&gl=${country}&q=${encodeURIComponent(query)}`;
+  const response = await proxyFetch(url, {
+    timeoutMs: 10000,
+    maxRetries: 1,
+    headers: { 'User-Agent': getRandomUserAgent(), 'Accept': 'application/json' },
+  });
+  if (!response.ok) throw new Error(`Autocomplete returned HTTP ${response.status}`);
+  const text = await response.text();
+  try {
+    const data = JSON.parse(text);
+    if (Array.isArray(data) && Array.isArray(data[1])) {
+      return data[1].filter((s: any) => typeof s === 'string');
+    }
+  } catch {}
+  return [];
+}
+
+// --- /api/serp/search: Full SERP ($0.01) ---
+serviceRouter.get('/serp/search', async (c) => {
+  const walletAddress = process.env.WALLET_ADDRESS;
+  if (!walletAddress) return c.json({ error: 'Wallet not configured' }, 500);
+  const payment = extractPayment(c);
+  if (!payment) return c.json(build402Response('/api/serp/search', 'Full Google SERP with organic, ads, AI Overview, PAA, map pack, knowledge panel. Real mobile IP.', SERP_SEARCH_PRICE, walletAddress, SERP_SEARCH_SCHEMA), 402);
+  const verification = await verifyPayment(payment, walletAddress, SERP_SEARCH_PRICE);
+  if (!verification.valid) return c.json({ error: 'Payment verification failed', reason: verification.error }, 402);
+  const query = c.req.query('query') || c.req.query('q');
+  if (!query) return c.json({ error: 'Missing required parameter: query' }, 400);
+  const country = c.req.query('country') || 'us';
+  const language = c.req.query('language') || 'en';
+  const location = c.req.query('location') || undefined;
+  try {
+    const proxy = getProxy();
+    const ip = await getProxyExitIp();
+    const results = await scrapeMobileSERP(query, country, language, location);
+    c.header('X-Payment-Settled', 'true');
+    c.header('X-Payment-TxHash', payment.txHash);
+    return c.json({ query, country, language, location: location || null, results, proxy: { ip, country: proxy.country, type: 'mobile' }, payment: { txHash: payment.txHash, network: payment.network, amount: verification.amount, settled: true } });
+  } catch (err: any) {
+    return c.json({ error: 'SERP scrape failed', message: err?.message || String(err) }, 502);
+  }
+});
+
+// --- /api/serp/ai: AI Overview Only ($0.005) ---
+serviceRouter.get('/serp/ai', async (c) => {
+  const walletAddress = process.env.WALLET_ADDRESS;
+  if (!walletAddress) return c.json({ error: 'Wallet not configured' }, 500);
+  const payment = extractPayment(c);
+  if (!payment) return c.json(build402Response('/api/serp/ai', 'AI Overview extraction only — lightweight endpoint.', SERP_AI_PRICE, walletAddress, SERP_AI_SCHEMA), 402);
+  const verification = await verifyPayment(payment, walletAddress, SERP_AI_PRICE);
+  if (!verification.valid) return c.json({ error: 'Payment verification failed', reason: verification.error }, 402);
+  const query = c.req.query('query') || c.req.query('q');
+  if (!query) return c.json({ error: 'Missing required parameter: query' }, 400);
+  const country = c.req.query('country') || 'us';
+  const language = c.req.query('language') || 'en';
+  try {
+    const proxy = getProxy();
+    const ip = await getProxyExitIp();
+    const results = await scrapeMobileSERP(query, country, language);
+    c.header('X-Payment-Settled', 'true');
+    c.header('X-Payment-TxHash', payment.txHash);
+    return c.json({ query, aiOverview: results.aiOverview, featuredSnippet: results.featuredSnippet, proxy: { ip, country: proxy.country, type: 'mobile' }, payment: { txHash: payment.txHash, network: payment.network, amount: verification.amount, settled: true } });
+  } catch (err: any) {
+    return c.json({ error: 'AI overview scrape failed', message: err?.message || String(err) }, 502);
+  }
+});
+
+// --- /api/serp/suggest: Autocomplete ($0.002) ---
+serviceRouter.get('/serp/suggest', async (c) => {
+  const walletAddress = process.env.WALLET_ADDRESS;
+  if (!walletAddress) return c.json({ error: 'Wallet not configured' }, 500);
+  const payment = extractPayment(c);
+  if (!payment) return c.json(build402Response('/api/serp/suggest', 'Google autocomplete suggestions via mobile proxy.', SERP_SUGGEST_PRICE, walletAddress, SERP_SUGGEST_SCHEMA), 402);
+  const verification = await verifyPayment(payment, walletAddress, SERP_SUGGEST_PRICE);
+  if (!verification.valid) return c.json({ error: 'Payment verification failed', reason: verification.error }, 402);
+  const query = c.req.query('query') || c.req.query('q');
+  if (!query) return c.json({ error: 'Missing required parameter: query' }, 400);
+  const country = c.req.query('country') || 'us';
+  try {
+    const proxy = getProxy();
+    const ip = await getProxyExitIp();
+    const suggestions = await scrapeGoogleAutocomplete(query, country);
+    c.header('X-Payment-Settled', 'true');
+    c.header('X-Payment-TxHash', payment.txHash);
+    return c.json({ query, suggestions, proxy: { ip, country: proxy.country, type: 'mobile' }, payment: { txHash: payment.txHash, network: payment.network, amount: verification.amount, settled: true } });
+  } catch (err: any) {
+    return c.json({ error: 'Autocomplete scrape failed', message: err?.message || String(err) }, 502);
+  }
+});
+
